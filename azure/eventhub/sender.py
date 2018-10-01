@@ -15,7 +15,7 @@ from azure.eventhub.common import EventHubError, _error_handler
 log = logging.getLogger(__name__)
 
 
-class Sender:
+class Sender(object):
     """
     Implements a Sender.
     """

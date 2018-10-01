@@ -15,7 +15,7 @@ from azure.eventhub.common import EventHubError, EventData, _error_handler
 log = logging.getLogger(__name__)
 
 
-class Receiver:
+class Receiver(object):
     """
     Implements a Receiver.
     """
