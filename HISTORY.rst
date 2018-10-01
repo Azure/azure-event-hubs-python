@@ -6,7 +6,7 @@ Release History
 1.2.0 (release-candidate)
 +++++++++++++++++++++++++
 
-- Support for Python 2.7.
+- Support for Python 2.7 in azure.eventhub module (azure.eventprocessorhost will not support Python 2.7).
 
 
 1.1.0 (2018-09-21)
