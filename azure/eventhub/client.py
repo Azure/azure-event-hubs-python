@@ -16,7 +16,6 @@ try:
 except ImportError:
     from urllib.parse import urlparse, unquote_plus, urlencode, quote_plus
 
-import six
 import uamqp
 from uamqp import Message
 from uamqp import authentication

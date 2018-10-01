@@ -315,7 +315,7 @@ class EventHubError(Exception):
 
     def _parse_error(self, error_list):
         details = []
-        self.message = error_list if isinstance(error_list, six.text_types) else error_list.decode('UTF-8')
+        self.message = error_list if isinstance(error_list, six.text_type) else error_list.decode('UTF-8')
         details_index = self.message.find(" Reference:")
         if details_index >= 0:
             details_msg = self.message[details_index + 1:]

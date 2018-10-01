@@ -112,14 +112,17 @@ def test_long_running_eph():
     loop = asyncio.get_event_loop()
 
     # Storage Account Credentials
-    STORAGE_ACCOUNT_NAME = os.environ['AZURE_STORAGE_ACCOUNT']
-    STORAGE_KEY = os.environ['AZURE_STORAGE_SAS_KEY']
-    LEASE_CONTAINER_NAME = "testleases"
+    try:
+        STORAGE_ACCOUNT_NAME = os.environ['AZURE_STORAGE_ACCOUNT']
+        STORAGE_KEY = os.environ['AZURE_STORAGE_SAS_KEY']
+        LEASE_CONTAINER_NAME = "testleases"
 
-    NAMESPACE = os.environ['EVENT_HUB_NAMESPACE']
-    EVENTHUB = os.environ['EVENT_HUB_NAME']
-    USER = os.environ['EVENT_HUB_SAS_POLICY']
-    KEY = os.environ['EVENT_HUB_SAS_KEY']
+        NAMESPACE = os.environ['EVENT_HUB_NAMESPACE']
+        EVENTHUB = os.environ['EVENT_HUB_NAME']
+        USER = os.environ['EVENT_HUB_SAS_POLICY']
+        KEY = os.environ['EVENT_HUB_SAS_KEY']
+    except KeyError:
+        pytest.skip("Missing live configuration.")
 
     # Eventhub config and storage manager 
     eh_config = EventHubConfig(NAMESPACE, EVENTHUB, USER, KEY, consumer_group="$default")
