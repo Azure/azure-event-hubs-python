@@ -14,7 +14,7 @@ _logger = logging.getLogger(__name__)
 
 class PartitionPump():
     """
-    Manages individual connection to a given partition
+    Manages individual connection to a given partition.
     """
 
     def __init__(self, host, lease):
@@ -27,30 +27,31 @@ class PartitionPump():
 
     def run(self):
         """
-        Makes pump sync so that it can be run in a thread
+        Makes pump sync so that it can be run in a thread.
         """
         self.loop = asyncio.new_event_loop()
         self.loop.run_until_complete(self.open_async())
 
     def set_pump_status(self, status):
         """
-        Updates pump status and logs update to console
+        Updates pump status and logs update to console.
         """
         self.pump_status = status
-        _logger.info("{} partition {}".format(status, self.lease.partition_id))
+        _logger.info("%r partition %r", status, self.lease.partition_id)
 
     def set_lease(self, new_lease):
         """
-        Sets a new partition lease to be processed by the pump
+        Sets a new partition lease to be processed by the pump.
+
         :param lease: The lease to set.
-        :type lease: ~azure.eventprocessorhost.Lease
+        :type lease: ~azure.eventprocessorhost.lease.Lease
         """
         if self.partition_context:
             self.partition_context.lease = new_lease
 
     async def open_async(self):
         """
-        Opens partition pump
+        Opens partition pump.
         """
         self.set_pump_status("Opening")
         self.partition_context = PartitionContext(self.host, self.lease.partition_id,
@@ -82,13 +83,15 @@ class PartitionPump():
     def is_closing(self):
         """
         Returns whether pump is closing.
-        :returns: bool
+
+        :rtype: bool
         """
         return self.pump_status == "Closing" or self.pump_status == "Closed"
 
     async def close_async(self, reason):
         """
         Safely closes the pump.
+
         :param reason: The reason for the shutdown.
         :type reason: str
         """
@@ -96,15 +99,14 @@ class PartitionPump():
         try:
             await self.on_closing_async(reason)
             if self.processor:
-                _logger.info("PartitionPumpInvokeProcessorCloseStart {} {} {}".format(
-                    self.host.guid, self.partition_context.partition_id, reason))
+                _logger.info("PartitionPumpInvokeProcessorCloseStart %r %r %r",
+                             self.host.guid, self.partition_context.partition_id, reason)
                 await self.processor.close_async(self.partition_context, reason)
-                _logger.info("PartitionPumpInvokeProcessorCloseStart {} {}".format(
-                    self.host.guid, self.partition_context.partition_id))
+                _logger.info("PartitionPumpInvokeProcessorCloseStart %r %r",
+                             self.host.guid, self.partition_context.partition_id)
         except Exception as err:  # pylint: disable=broad-except
             await self.process_error_async(err)
-            _logger.error("{} {} {!r}".format(
-                self.host.guid, self.partition_context.partition_id, err))
+            _logger.error("%r %r %r", self.host.guid, self.partition_context.partition_id, err)
             raise err
 
         if reason == "LeaseLost":
@@ -112,8 +114,7 @@ class PartitionPump():
                 _logger.info("Lease Lost releasing ownership")
                 await self.host.storage_manager.release_lease_async(self.partition_context.lease)
             except Exception as err:  # pylint: disable=broad-except
-                _logger.error("{} {} {!r}".format(
-                    self.host.guid, self.partition_context.partition_id, err))
+                _logger.error("%r %r %r", self.host.guid, self.partition_context.partition_id, err)
                 raise err
 
         self.set_pump_status("Closed")
@@ -122,6 +123,7 @@ class PartitionPump():
     async def on_closing_async(self, reason):
         """
         Event handler for on closing event.
+
         :param reason: The reason for the shutdown.
         :type reason: str
         """
@@ -130,8 +132,9 @@ class PartitionPump():
     async def process_events_async(self, events):
         """
         Process pump events.
+
         :param events: List of events to be processed.
-        :type events: list of ~azure.eventhub.EventData
+        :type events: list[~azure.eventhub.common.EventData]
         """
         if events:
             # Synchronize to serialize calls to the processor. The handler is not installed until
@@ -140,7 +143,7 @@ class PartitionPump():
             # CloseAsync are protected by synchronizing too.
             try:
                 last = events[-1]
-                if last != None:
+                if last is not None:
                     self.partition_context.set_offset_and_sequence_number(last)
                     await self.processor.process_events_async(self.partition_context, events)
             except Exception as err:  # pylint: disable=broad-except
@@ -149,6 +152,7 @@ class PartitionPump():
     async def process_error_async(self, error):
         """
         Passes error to the event processor for processing.
+
         :param error: An error the occurred.
         :type error: Exception
         """

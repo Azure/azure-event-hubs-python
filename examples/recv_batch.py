@@ -31,10 +31,6 @@ OFFSET = Offset("-1")
 PARTITION = "0"
 
 
-def on_event_data(event_data):
-    logger.debug("Got event no. {}".format(event_data.sequence_number))
-
-
 total = 0
 last_sn = -1
 last_offset = "-1"
@@ -42,9 +38,9 @@ client = EventHubClient(ADDRESS, debug=False, username=USER, password=KEY)
 try:
     receiver = client.add_receiver(CONSUMER_GROUP, PARTITION, prefetch=100, offset=OFFSET)
     client.run()
-    batched_events = receiver.receive(max_batch_size=10, callback=on_event_data)
+    batched_events = receiver.receive(max_batch_size=10)
     for event_data in batched_events:
-        last_offset = event_data.offset
+        last_offset = event_data.offset.value
         last_sn = event_data.sequence_number
         total += 1
         print("Partition {}, Received {}, sn={} offset={}".format(

@@ -10,57 +10,73 @@ receive test.
 """
 
 import logging
-import asyncio
 import argparse
 import time
 import os
-from urllib.parse import quote_plus
+import sys
+
+from logging.handlers import RotatingFileHandler
 
 from azure.eventhub import Offset
-from azure.eventhub.async import EventHubClientAsync
+from azure.eventhub import EventHubClient
 
-try:
-    import tests
-    logger = tests.get_logger("recv_test.log", logging.INFO)
-except ImportError:
-    logger = logging.getLogger("uamqp")
-    logger.setLevel(logging.INFO)
+def get_logger(filename, level=logging.INFO):
+    azure_logger = logging.getLogger("azure")
+    azure_logger.setLevel(level)
+    uamqp_logger = logging.getLogger("uamqp")
+    uamqp_logger.setLevel(level)
+
+    formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+    if filename:
+        file_handler = RotatingFileHandler(filename, maxBytes=20*1024*1024, backupCount=3)
+        file_handler.setFormatter(formatter)
+        azure_logger.addHandler(file_handler)
+        uamqp_logger.addHandler(file_handler)
+
+    return azure_logger
+
+logger = get_logger("recv_test.log", logging.INFO)
 
 
-async def pump(_pid, receiver, _args, _dl):
+def get_partitions(args):
+    eh_data = args.get_eventhub_info()
+    return eh_data["partition_ids"]
+
+
+def pump(receivers, duration):
     total = 0
     iteration = 0
-    deadline = time.time() + _dl
+    deadline = time.time() + duration
     try:
         while time.time() < deadline:
-            batch = await receiver.receive(timeout=5)
-            size = len(batch)
-            total += size
-            iteration += 1
-            if size == 0:
-                print("{}: No events received, queue size {}, delivered {}".format(
-                    _pid,
-                    receiver.queue_size,
-                    receiver.delivered))
-            elif iteration >= 80:
-                iteration = 0
-                print("{}: total received {}, last sn={}, last offset={}".format(
-                            _pid,
-                            total,
-                            batch[-1].sequence_number,
-                            batch[-1].offset))
-        print("{}: total received {}".format(
-            _pid,
-            total))
+            for pid, receiver in receivers.items():
+                batch = receiver.receive(timeout=5)
+                size = len(batch)
+                total += size
+                iteration += 1
+                if size == 0:
+                    print("{}: No events received, queue size {}, delivered {}".format(
+                        pid,
+                        receiver.queue_size,
+                        total))
+                elif iteration >= 50:
+                    iteration = 0
+                    print("{}: total received {}, last sn={}, last offset={}".format(
+                                pid,
+                                total,
+                                batch[-1].sequence_number,
+                                batch[-1].offset.value))
+            print("Total received {}".format(total))
     except Exception as e:
-        print("Partition {} receiver failed: {}".format(_pid, e))
+        print("Receiver failed: {}".format(e))
+        raise
 
 
 def test_long_running_receive():
     parser = argparse.ArgumentParser()
     parser.add_argument("--duration", help="Duration in seconds of the test", type=int, default=30)
     parser.add_argument("--consumer", help="Consumer group name", default="$default")
-    parser.add_argument("--partitions", help="Comma seperated partition IDs", default="0")
+    parser.add_argument("--partitions", help="Comma seperated partition IDs")
     parser.add_argument("--offset", help="Starting offset", default="-1")
     parser.add_argument("--conn-str", help="EventHub connection string", default=os.environ.get('EVENT_HUB_CONNECTION_STR'))
     parser.add_argument("--eventhub", help="Name of EventHub")
@@ -68,14 +84,13 @@ def test_long_running_receive():
     parser.add_argument("--sas-policy", help="Name of the shared access policy to authenticate with")
     parser.add_argument("--sas-key", help="Shared access key")
 
-    loop = asyncio.get_event_loop()
     args, _ = parser.parse_known_args()
     if args.conn_str:
-        client = EventHubClientAsync.from_connection_string(
+        client = EventHubClient.from_connection_string(
             args.conn_str,
-            eventhub=args.eventhub)
+            eventhub=args.eventhub, debug=False)
     elif args.address:
-        client = EventHubClientAsync(
+        client = EventHubClient(
             args.address,
             username=args.sas_policy,
             password=args.sas_key)
@@ -87,20 +102,21 @@ def test_long_running_receive():
             raise ValueError("Must specify either '--conn-str' or '--address'")
 
     try:
-        pumps = []
-        for pid in args.partitions.split(","):
-            receiver = client.add_async_receiver(
+        if not args.partitions:
+            partitions = get_partitions(client)
+        else:
+            partitions = args.partitions.split(",")
+        pumps = {}
+        for pid in partitions:
+            pumps[pid] = client.add_receiver(
                 consumer_group=args.consumer,
                 partition=pid,
                 offset=Offset(args.offset),
-                prefetch=5000)
-            pumps.append(pump(pid, receiver, args, args.duration))
-        loop.run_until_complete(client.run_async())
-        loop.run_until_complete(asyncio.gather(*pumps))
-    except:
-        raise
+                prefetch=50)
+        client.run()
+        pump(pumps, args.duration)
     finally:
-        loop.run_until_complete(client.stop_async())
+        client.stop()
 
 
 if __name__ == '__main__':

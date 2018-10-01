@@ -28,14 +28,39 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
     Manages checkpoints and lease with azure storage blobs. In this implementation,
     checkpoints are data that's actually in the lease blob, so checkpoint operations
     turn into lease operations under the covers.
+
+    :param str storage_account_name: The storage account name. This is used to
+     authenticate requests signed with an account key and to construct the storage
+     endpoint. It is required unless a connection string is given.
+    :param str storage_account_key: The storage account key. This is used for shared key
+     authentication. If neither account key or sas token is specified, anonymous access
+     will be used.
+    :param str lease_container_name: The name of the container that will be used to store
+     leases. If it does not already exist it will be created. Default value is 'eph-leases'.
+    :param int lease_renew_interval: The interval in seconds at which EPH will attempt to
+     renew the lease of a particular partition. Default value is 10.
+    :param int lease_duration: The duration in seconds of a lease on a partition.
+     Default value is 30.
+    :param str sas_token: A shared access signature token to use to authenticate requests
+     instead of the account key. If account key and sas token are both specified,
+     account key will be used to sign. If neither are specified, anonymous access will be used.
+    :param str endpoint_suffix: The host base component of the url, minus the account name.
+     Defaults to Azure (core.windows.net). Override this to use a National Cloud.
+    :param str connection_string: If specified, this will override all other endpoint parameters.
+     See http://azure.microsoft.com/en-us/documentation/articles/storage-configure-connection-string/
+     for the connection string format.
     """
 
-    def __init__(self, storage_account_name, storage_account_key, lease_container_name,
-                 storage_blob_prefix=None, lease_renew_interval=10, lease_duration=30):
+    def __init__(self, storage_account_name=None, storage_account_key=None, lease_container_name="eph-leases",
+                 storage_blob_prefix=None, lease_renew_interval=10, lease_duration=30,
+                 sas_token=None, endpoint_suffix="core.windows.net", connection_string=None):
         AbstractCheckpointManager.__init__(self)
         AbstractLeaseManager.__init__(self, lease_renew_interval, lease_duration)
         self.storage_account_name = storage_account_name
         self.storage_account_key = storage_account_key
+        self.storage_sas_token = sas_token
+        self.endpoint_suffix = endpoint_suffix
+        self.connection_string = connection_string
         self.lease_container_name = lease_container_name
         self.storage_blob_prefix = storage_blob_prefix
         self.storage_client = None
@@ -47,8 +72,8 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=32)
 
         # Validate storage inputs
-        if not self.storage_account_name or not self.storage_account_key:
-            raise ValueError("Need a valid storage account name and key")
+        if not self.storage_account_name and not self.connection_string:
+            raise ValueError("Need a valid storage account name or connection string.")
         if not re.compile(r"^[a-z0-9](([a-z0-9\-[^\-])){1,61}[a-z0-9]$").match(self.lease_container_name):
             raise ValueError("Azure Storage lease container name is invalid.\
                               Please check naming conventions at\
@@ -68,6 +93,9 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         self.host = host
         self.storage_client = BlockBlobService(account_name=self.storage_account_name,
                                                account_key=self.storage_account_key,
+                                               sas_token=self.storage_sas_token,
+                                               endpoint_suffix=self.endpoint_suffix,
+                                               connection_string=self.connection_string,
                                                request_session=self.request_session)
         self.consumer_group_directory = self.storage_blob_prefix + self.host.eh_config.consumer_group
 
@@ -76,8 +104,10 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
     async def create_checkpoint_store_if_not_exists_async(self):
         """
         Create the checkpoint store if it doesn't exist. Do nothing if it does exist.
-        :returns: `True` if the checkpoint store already exists or was created OK, `False`
-         if there was a failure
+
+        :return: `True` if the checkpoint store already exists or was created OK, `False`
+         if there was a failure.
+        :rtype: bool
         """
         await self.create_lease_store_if_not_exists_async()
 
@@ -85,7 +115,11 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         """
         Get the checkpoint data associated with the given partition.
         Could return null if no checkpoint has been created for that partition.
-        :returns: Given partition checkpoint info, or `None` if none has been previously stored.
+
+        :param partition_id: The partition ID.
+        :type partition_id: str
+        :return: Given partition checkpoint info, or `None` if none has been previously stored.
+        :rtype: ~azure.eventprocessorhost.checkpoint.Checkpoint
         """
         lease = await self.get_lease_async(partition_id)
         checkpoint = None
@@ -99,7 +133,11 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         """
         Create the given partition checkpoint if it doesn't exist.Do nothing if it does exist.
         The offset/sequenceNumber for a freshly-created checkpoint should be set to StartOfStream/0.
-        :returns: The checkpoint for the given partition, whether newly created or already existing.
+
+        :param partition_id: The partition ID.
+        :type partition_id: str
+        :return: The checkpoint for the given partition, whether newly created or already existing.
+        :rtype: ~azure.eventprocessorhost.checkpoint.Checkpoint
         """
         checkpoint = await self.get_checkpoint_async(partition_id)
         if not checkpoint:
@@ -111,17 +149,25 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         """
         Update the checkpoint in the store with the offset/sequenceNumber in the provided checkpoint
         checkpoint:offset/sequeceNumber to update the store with.
+
+        :param lease: The stored lease to be updated.
+        :type lease: ~azure.eventprocessorhost.lease.Lease
+        :param checkpoint: The checkpoint to update the lease with.
+        :type checkpoint: ~azure.eventprocessorhost.checkpoint.Checkpoint
         """
         new_lease = AzureBlobLease()
         new_lease.with_source(lease)
         new_lease.offset = checkpoint.offset
         new_lease.sequence_number = checkpoint.sequence_number
-        await self.update_lease_async(new_lease)
+        return await self.update_lease_async(new_lease)
 
     async def delete_checkpoint_async(self, partition_id):
         """
         Delete the stored checkpoint for the given partition. If there is no stored checkpoint
         for the given partition, that is treated as success.
+
+        :param partition_id: The partition ID.
+        :type partition_id: str
         """
         return  # Make this a no-op to avoid deleting leases by accident.
 
@@ -130,7 +176,9 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
     async def create_lease_store_if_not_exists_async(self):
         """
         Create the lease store if it does not exist, do nothing if it does exist.
-        :returns: `True` if the lease store already exists or was created successfully, `False` if not.
+
+        :return: `True` if the lease store already exists or was created successfully, `False` if not.
+        :rtype: bool
         """
         try:
             await self.host.loop.run_in_executor(
@@ -140,7 +188,7 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
                     self.lease_container_name))
 
         except Exception as err:  # pylint: disable=broad-except
-            _logger.error(repr(err))
+            _logger.error("%r", err)
             raise err
 
         return True
@@ -148,7 +196,9 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
     async def delete_lease_store_async(self):
         """
         Not used by EventProcessorHost, but a convenient function to have for testing.
-        :returns: `True` if the lease store was deleted successfully, `False` if not.
+
+        :return: `True` if the lease store was deleted successfully, `False` if not.
+        :rtype: bool
         """
         return "Not Supported in Python"
 
@@ -156,7 +206,11 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         """
         Return the lease info for the specified partition.
         Can return null if no lease has been created in the store for the specified partition.
-        :returns: lease info for the partition, or `None`.
+
+        :param partition_id: The partition ID.
+        :type partition_id: str
+        :return: lease info for the partition, or `None`.
+        :rtype: ~azure.eventprocessorhost.lease.Lease
         """
         try:
             blob = await self.host.loop.run_in_executor(
@@ -180,18 +234,20 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
                             partition_id))
                     return res.properties.lease.state
                 except Exception as err:  # pylint: disable=broad-except
-                    _logger.error("Failed to get lease state {} {}".format(err, partition_id))
+                    _logger.error("Failed to get lease state %r %r", err, partition_id)
 
             lease.state = state
             return lease
         except Exception as err:  # pylint: disable=broad-except
-            _logger.error("Failed to get lease {} {}".format(err, partition_id))
+            _logger.error("Failed to get lease %r %r", err, partition_id)
 
     async def get_all_leases(self):
         """
         Return the lease info for all partitions.
         A typical implementation could just call get_lease_async() on all partitions.
-        :returns: list of lease info.
+
+        :return: A list of lease info.
+        :rtype: list[~azure.eventprocessorhost.lease.Lease]
         """
         lease_futures = []
         partition_ids = await self.host.partition_manager.get_partition_ids_async()
@@ -203,19 +259,21 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         """
         Create in the store the lease info for the given partition, if it does not exist.
         Do nothing if it does exist in the store already.
+
         :param partition_id: The ID of a given parition.
         :type partition_id: str
-        :returns: the existing or newly-created lease info for the partition.
+        :return: the existing or newly-created lease info for the partition.
+        :rtype: ~azure.eventprocessorhost.lease.Lease
         """
         return_lease = None
         try:
             return_lease = AzureBlobLease()
             return_lease.partition_id = partition_id
             json_lease = json.dumps(return_lease.serializable())
-            _logger.info("Creating Lease {} {} {}".format(
-                self.lease_container_name,
-                partition_id,
-                json_lease))
+            _logger.info("Creating Lease %r %r %r",
+                         self.lease_container_name,
+                         partition_id,
+                         json_lease)
             await self.host.loop.run_in_executor(
                 self.executor,
                 functools.partial(
@@ -227,7 +285,7 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
             try:
                 return_lease = await self.get_lease_async(partition_id)
             except Exception as err:  # pylint: disable=broad-except
-                _logger.error("Failed to create lease {!r}".format(err))
+                _logger.error("Failed to create lease %r", err)
                 raise err
         return return_lease
 
@@ -235,6 +293,9 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         """
         Delete the lease info for the given partition from the store.
         If there is no stored lease for the given partition, that is treated as success.
+
+        :param lease: The stored lease to be deleted.
+        :type lease: ~azure.eventprocessorhost.lease.Lease
         """
         await self.host.loop.run_in_executor(
             self.executor,
@@ -249,7 +310,11 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         Acquire the lease on the desired partition for this EventProcessorHost.
         Note that it is legal to acquire a lease that is already owned by another host.
         Lease-stealing is how partitions are redistributed when additional hosts are started.
-        :returns: `True` if the lease was acquired successfully, `False` if not.
+
+        :param lease: The stored lease to be acquired.
+        :type lease: ~azure.eventprocessorhost.lease.Lease
+        :return: `True` if the lease was acquired successfully, `False` if not.
+        :rtype: bool
         """
         retval = True
         new_lease_id = str(uuid.uuid4())
@@ -271,7 +336,7 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
                     # than it should, rebalancing will take care of that quickly enough.
                     retval = False
                 else:
-                    _logger.info("ChangingLease {} {}".format(self.host.guid, lease.partition_id))
+                    _logger.info("ChangingLease %r %r", self.host.guid, lease.partition_id)
                     await self.host.loop.run_in_executor(
                         self.executor,
                         functools.partial(
@@ -282,7 +347,7 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
                             new_lease_id))
                     lease.token = new_lease_id
             else:
-                _logger.info("AcquiringLease {} {}".format(self.host.guid, lease.partition_id))
+                _logger.info("AcquiringLease %r %r", self.host.guid, lease.partition_id)
                 lease.token = await self.host.loop.run_in_executor(
                     self.executor,
                     functools.partial(
@@ -294,10 +359,9 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
             lease.owner = self.host.host_name
             lease.increment_epoch()
             # check if this solves the issue
-            await self.update_lease_async(lease)
+            retval = await self.update_lease_async(lease)
         except Exception as err:  # pylint: disable=broad-except
-            _logger.error("Failed to acquire lease {!r} {} {}".format(
-                err, partition_id, lease.token))
+            _logger.error("Failed to acquire lease %r %r %r", err, partition_id, lease.token)
             return False
 
         return retval
@@ -307,7 +371,11 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         Renew a lease currently held by this host.
         If the lease has been stolen, or expired, or released, it is not possible to renew it.
         You will have to call getLease() and then acquireLease() again.
-        :returns: `True` if the lease was renewed successfully, `False` if not.
+
+        :param lease: The stored lease to be renewed.
+        :type lease: ~azure.eventprocessorhost.lease.Lease
+        :return: `True` if the lease was renewed successfully, `False` if not.
+        :rtype: bool
         """
         try:
             await self.host.loop.run_in_executor(
@@ -320,10 +388,10 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
                     timeout=self.lease_duration))
         except Exception as err:  # pylint: disable=broad-except
             if "LeaseIdMismatchWithLeaseOperation" in str(err):
-                _logger.info("LeaseLost")
+                _logger.info("LeaseLost on partition %r", lease.partition_id)
             else:
-                _logger.error("Failed to renew lease on partition {} with token {} {!r}".format(
-                    lease.partition_id, lease.token, err))
+                _logger.error("Failed to renew lease on partition %r with token %r %r",
+                              lease.partition_id, lease.token, err)
             return False
         return True
 
@@ -331,11 +399,15 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         """
         Give up a lease currently held by this host. If the lease has been stolen, or expired,
         releasing it is unnecessary, and will fail if attempted.
-        :returns: `True` if the lease was released successfully, `False` if not.
+
+        :param lease: The stored lease to be released.
+        :type lease: ~azure.eventprocessorhost.lease.Lease
+        :return: `True` if the lease was released successfully, `False` if not.
+        :rtype: bool
         """
         lease_id = None
         try:
-            _logger.info("Releasing lease {} {}".format(self.host.guid, lease.partition_id))
+            _logger.info("Releasing lease %r %r", self.host.guid, lease.partition_id)
             lease_id = lease.token
             released_copy = AzureBlobLease()
             released_copy.with_lease(lease)
@@ -358,8 +430,8 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
                     lease.partition_id,
                     lease_id))
         except Exception as err:  # pylint: disable=broad-except
-            _logger.error("Failed to release lease {} {} {}".format(
-                err, lease.partition_id, lease_id))
+            _logger.error("Failed to release lease %r %r %r",
+                          err, lease.partition_id, lease_id)
             return False
         return True
 
@@ -369,7 +441,11 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         hold a lease in order to update it. If the lease has been stolen, or expired, or released,
         it cannot be updated. Updating should renew the lease before performing the update to
         avoid lease expiration during the process.
-        :returns: `True` if the updated was performed successfully, `False` if not.
+
+        :param lease: The stored lease to be updated.
+        :type lease: ~azure.eventprocessorhost.lease.Lease
+        :return: `True` if the updated was performed successfully, `False` if not.
+        :rtype: bool
         """
         if lease is None:
             return False
@@ -377,7 +453,7 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
         if not lease.token:
             return False
 
-        _logger.debug("Updating lease {} {}".format(self.host.guid, lease.partition_id))
+        _logger.debug("Updating lease %r %r", self.host.guid, lease.partition_id)
 
         # First, renew the lease to make sure the update will go through.
         if await self.renew_lease_async(lease):
@@ -392,8 +468,8 @@ class AzureStorageCheckpointLeaseManager(AbstractCheckpointManager, AbstractLeas
                         lease_id=lease.token))
 
             except Exception as err:  # pylint: disable=broad-except
-                _logger.error("Failed to update lease {} {} {}".format(
-                    self.host.guid, lease.partition_id, err))
+                _logger.error("Failed to update lease %r %r %r",
+                              self.host.guid, lease.partition_id, err)
                 raise err
         else:
             return False

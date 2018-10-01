@@ -12,12 +12,27 @@ import os
 
 from azure.eventhub import EventHubClient, Sender, EventData
 
-try:
-    import tests
-    logger = tests.get_logger("send_test.log", logging.INFO)
-except ImportError:
-    logger = logging.getLogger("uamqp")
-    logger.setLevel(logging.INFO)
+import sys
+import logging
+from logging.handlers import RotatingFileHandler
+
+
+def get_logger(filename, level=logging.INFO):
+    azure_logger = logging.getLogger("azure")
+    azure_logger.setLevel(level)
+    uamqp_logger = logging.getLogger("uamqp")
+    uamqp_logger.setLevel(level)
+
+    formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+    if filename:
+        file_handler = RotatingFileHandler(filename, maxBytes=20*1024*1024, backupCount=3)
+        file_handler.setFormatter(formatter)
+        azure_logger.addHandler(file_handler)
+        uamqp_logger.addHandler(file_handler)
+
+    return azure_logger
+
+logger = get_logger("send_test.log", logging.INFO)
 
 
 def check_send_successful(outcome, condition):

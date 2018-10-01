@@ -32,11 +32,12 @@ try:
         raise ValueError("No EventHubs URL supplied.")
 
     client = EventHubClient(ADDRESS, debug=False, username=USER, password=KEY)
-    sender = client.add_sender(partition="1")
+    sender = client.add_sender(partition="0")
     client.run()
     try:
         start_time = time.time()
         for i in range(100):
+            logger.info("Sending message: {}".format(i))
             sender.send(EventData(str(i)))
     except:
         raise

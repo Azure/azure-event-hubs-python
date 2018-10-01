@@ -29,9 +29,9 @@ with open(os.path.join(package_folder_path, '__init__.py'), 'r') as fd:
 if not version:
     raise RuntimeError('Cannot find version information')
 
-with open('README.rst', encoding='utf-8') as f:
+with open('README.rst') as f:
     readme = f.read()
-with open('HISTORY.rst', encoding='utf-8') as f:
+with open('HISTORY.rst') as f:
     history = f.read()
 
 setup(
@@ -44,20 +44,27 @@ setup(
     author_email='azpysdkhelp@microsoft.com',
     url='https://github.com/Azure/azure-event-hubs-python',
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 5 - Production/Stable',
         'Programming Language :: Python',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'License :: OSI Approved :: MIT License',
     ],
     zip_safe=False,
-    packages=find_packages(exclude=["examples", "tests"]),
+    packages=find_packages(exclude=[
+        "azure",
+        "examples",
+        "tests",
+        "tests.asynctests"]),
     install_requires=[
-        'uamqp~=0.1.0rc1',
-        'msrestazure~=0.4.11',
+        'uamqp>=1.1.0rc1,<2.0.0',
+        'msrestazure>=0.4.32,<2.0.0',
         'azure-common~=1.1',
-        'azure-storage~=0.36.0'
+        'azure-storage-blob~=1.3'
     ]
 )

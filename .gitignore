@@ -39,6 +39,9 @@ pip-delete-this-directory.txt
 azure/storage/
 azure/common/
 azure/profiles/
+*.log.1
+*.log.2
+*.log.3
 
 htmlcov/
 .tox/
@@ -105,3 +108,10 @@ ENV/
 .mypy_cache/
 .pytest_cache/v/cache/lastfailed
 .pytest_cache/v/cache/nodeids
+
+# EventHub
+azure/mgmt/
+azure/common/
+azure/profiles/
+azure/servicebus/
+features/steps/mgmt_settings_real.py

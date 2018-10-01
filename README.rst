@@ -1,6 +1,16 @@
 Microsoft Azure SDK for Event Hubs
 ==================================
 
+.. image:: https://img.shields.io/pypi/v/azure-eventhub.svg?maxAge=2592000
+    :target: https://pypi.python.org/pypi/azure-eventhub/
+
+.. image:: https://img.shields.io/pypi/pyversions/azure-eventhub.svg?maxAge=2592000
+    :target: https://pypi.python.org/pypi/azure-eventhub/
+
+.. image:: https://travis-ci.org/Azure/azure-event-hubs-python.svg?branch=master
+    :target: https://travis-ci.org/Azure/azure-event-hubs-python
+
+
 A Python AMQP client for Azure Event Hubs the provides:
 
 - A sender to publish events to the Event Hubs service.
@@ -20,6 +30,15 @@ Wheels are provided for all major operating systems, so you can install directly
 .. code:: shell
 
     $ pip install azure-eventhub
+
+Python 2.7 support
+++++++++++++++++++
+The uAMQP library currently only supports Python 3.4 and above. Python 2.7 support is planned for a future release.
+
+
+Documentation
++++++++++++++
+Reference documentation is available at `docs.microsoft.com/python/api/azure-eventhub <https://docs.microsoft.com/python/api/azure-eventhub>`__.
 
 
 Examples
