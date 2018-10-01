@@ -10,15 +10,16 @@ receive test.
 """
 
 import logging
+import asyncio
 import argparse
 import time
 import os
 import sys
-
+from urllib.parse import quote_plus
 from logging.handlers import RotatingFileHandler
 
 from azure.eventhub import Offset
-from azure.eventhub import EventHubClient
+from azure.eventhub import EventHubClientAsync
 
 def get_logger(filename, level=logging.INFO):
     azure_logger = logging.getLogger("azure")
@@ -35,44 +36,45 @@ def get_logger(filename, level=logging.INFO):
 
     return azure_logger
 
-logger = get_logger("recv_test.log", logging.INFO)
+logger = get_logger("recv_test_async.log", logging.INFO)
 
 
-def get_partitions(args):
-    eh_data = args.get_eventhub_info()
+async def get_partitions(args):
+    eh_data = await args.get_eventhub_info_async()
     return eh_data["partition_ids"]
 
 
-def pump(receivers, duration):
+async def pump(_pid, receiver, _args, _dl):
     total = 0
     iteration = 0
-    deadline = time.time() + duration
+    deadline = time.time() + _dl
     try:
         while time.time() < deadline:
-            for pid, receiver in receivers.items():
-                batch = receiver.receive(timeout=5)
-                size = len(batch)
-                total += size
-                iteration += 1
-                if size == 0:
-                    print("{}: No events received, queue size {}, delivered {}".format(
-                        pid,
-                        receiver.queue_size,
-                        total))
-                elif iteration >= 50:
-                    iteration = 0
-                    print("{}: total received {}, last sn={}, last offset={}".format(
-                                pid,
-                                total,
-                                batch[-1].sequence_number,
-                                batch[-1].offset.value))
-            print("Total received {}".format(total))
+            batch = await receiver.receive(timeout=5)
+            size = len(batch)
+            total += size
+            iteration += 1
+            if size == 0:
+                print("{}: No events received, queue size {}, delivered {}".format(
+                    _pid,
+                    receiver.queue_size,
+                    total))
+            elif iteration >= 50:
+                iteration = 0
+                print("{}: total received {}, last sn={}, last offset={}".format(
+                            _pid,
+                            total,
+                            batch[-1].sequence_number,
+                            batch[-1].offset.value))
+        print("{}: total received {}".format(
+            _pid,
+            total))
     except Exception as e:
-        print("Receiver failed: {}".format(e))
+        print("Partition {} receiver failed: {}".format(_pid, e))
         raise
 
 
-def test_long_running_receive():
+def test_long_running_receive_async():
     parser = argparse.ArgumentParser()
     parser.add_argument("--duration", help="Duration in seconds of the test", type=int, default=30)
     parser.add_argument("--consumer", help="Consumer group name", default="$default")
@@ -84,13 +86,14 @@ def test_long_running_receive():
     parser.add_argument("--sas-policy", help="Name of the shared access policy to authenticate with")
     parser.add_argument("--sas-key", help="Shared access key")
 
+    loop = asyncio.get_event_loop()
     args, _ = parser.parse_known_args()
     if args.conn_str:
-        client = EventHubClient.from_connection_string(
+        client = EventHubClientAsync.from_connection_string(
             args.conn_str,
             eventhub=args.eventhub, debug=False)
     elif args.address:
-        client = EventHubClient(
+        client = EventHubClientAsync(
             args.address,
             username=args.sas_policy,
             password=args.sas_key)
@@ -103,21 +106,22 @@ def test_long_running_receive():
 
     try:
         if not args.partitions:
-            partitions = get_partitions(client)
+            partitions = loop.run_until_complete(get_partitions(client))
         else:
             partitions = args.partitions.split(",")
-        pumps = {}
+        pumps = []
         for pid in partitions:
-            pumps[pid] = client.add_receiver(
+            receiver = client.add_async_receiver(
                 consumer_group=args.consumer,
                 partition=pid,
                 offset=Offset(args.offset),
                 prefetch=50)
-        client.run()
-        pump(pumps, args.duration)
+            pumps.append(pump(pid, receiver, args, args.duration))
+        loop.run_until_complete(client.run_async())
+        loop.run_until_complete(asyncio.gather(*pumps))
     finally:
-        client.stop()
+        loop.run_until_complete(client.stop_async())
 
 
 if __name__ == '__main__':
-    test_long_running_receive()
+    test_long_running_receive_async()
