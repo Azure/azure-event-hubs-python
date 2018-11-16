@@ -79,7 +79,7 @@ async def pump(_pid, receiver, _args, _dl):
         raise
 
 
-def test_long_running_receive():
+def test_long_running_receive_async():
     parser = argparse.ArgumentParser()
     parser.add_argument("--duration", help="Duration in seconds of the test", type=int, default=30)
     parser.add_argument("--consumer", help="Consumer group name", default="$default")
@@ -130,4 +130,4 @@ def test_long_running_receive():
 
 
 if __name__ == '__main__':
-    test_long_running_receive()
+    test_long_running_receive_async()
