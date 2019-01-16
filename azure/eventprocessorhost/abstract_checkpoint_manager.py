@@ -54,7 +54,7 @@ class AbstractCheckpointManager(ABC):
         pass
 
     @abstractmethod
-    async def update_checkpoint_async(self, lease, checkpoint):
+    async def update_checkpoint_async(self, lease, checkpoint, event_processor_context=None):
         """
         Update the checkpoint in the store with the offset/sequenceNumber in the provided checkpoint.
 

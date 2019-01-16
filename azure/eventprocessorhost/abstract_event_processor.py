@@ -5,6 +5,7 @@
 
 from abc import ABC, abstractmethod
 
+
 class AbstractEventProcessor(ABC):
     """
     Abstract that must be extended by event processor classes.
@@ -13,12 +14,14 @@ class AbstractEventProcessor(ABC):
         pass
 
     @abstractmethod
-    async def open_async(self, context):
+    async def open_async(self, context, event_processor_context=None):
         """
         Called by processor host to initialize the event processor.
 
         :param context: Information about the partition
         :type context: ~azure.eventprocessorhost.partition_context.PartitionContext
+        :param event_processor_context: State of the Event Processor.
+        :type event_processor_context: str
         """
         pass
 

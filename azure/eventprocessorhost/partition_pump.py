@@ -61,7 +61,8 @@ class PartitionPump():
         self.partition_context.lease = self.lease
         self.processor = self.host.event_processor(self.host.event_processor_params)
         try:
-            await self.processor.open_async(self.partition_context)
+            event_processor_context = self.lease.event_processor_context
+            await self.processor.open_async(self.partition_context, event_processor_context)
         except Exception as err:  # pylint: disable=broad-except
             # If the processor won't create or open, only thing we can do here is pass the buck.
             # Null it out so we don't try to operate on it further.
