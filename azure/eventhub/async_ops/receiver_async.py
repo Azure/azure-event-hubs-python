@@ -134,6 +134,11 @@ class AsyncReceiver(Receiver):
             await self._handler.open_async()
             while not await self._handler.client_ready_async():
                 await asyncio.sleep(0.05)
+        except errors.TokenExpired as shutdown:
+            log.info("AsyncReceiver disconnected due to token expiry. Shutting down.")
+            error = EventHubError(str(shutdown), shutdown)
+            await self.close(exception=error)
+            raise error
         except (errors.LinkDetach, errors.ConnectionClose) as shutdown:
             if shutdown.action.retry and self.auto_reconnect:
                 log.info("AsyncReceiver detached. Attempting reconnect.")
@@ -231,6 +236,10 @@ class AsyncReceiver(Receiver):
                 event_data = EventData(message=message)
                 self.offset = event_data.offset
                 data_batch.append(event_data)
+            return data_batch
+        except errors.TokenExpired:
+            log.info("AsyncReceiver disconnected due to token expiry. Attempting reconnect.")
+            await self.reconnect_async()
             return data_batch
         except (errors.LinkDetach, errors.ConnectionClose) as shutdown:
             if shutdown.action.retry and self.auto_reconnect:

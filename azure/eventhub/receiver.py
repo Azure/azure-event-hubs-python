@@ -13,6 +13,7 @@ from uamqp import ReceiveClient, Source
 
 from azure.eventhub.common import EventHubError, EventData, _error_handler
 
+
 log = logging.getLogger(__name__)
 
 
@@ -128,21 +129,31 @@ class Receiver(object):
             self._handler.open()
             while not self._handler.client_ready():
                 time.sleep(0.05)
+        except errors.TokenExpired as shutdown:
+            log.info("Receiver disconnected due to token expiry. Shutting down.")
+            error = EventHubError(str(shutdown), shutdown)
+            self.close(exception=error)
+            raise error
         except (errors.LinkDetach, errors.ConnectionClose) as shutdown:
             if shutdown.action.retry and self.auto_reconnect:
+                log.info("Receiver detached. Attempting reconnect.")
                 self.reconnect()
             else:
+                log.info("Receiver detached. Shutting down.")
                 error = EventHubError(str(shutdown), shutdown)
                 self.close(exception=error)
                 raise error
         except errors.MessageHandlerError as shutdown:
             if self.auto_reconnect:
+                log.info("Receiver detached. Attempting reconnect.")
                 self.reconnect()
             else:
+                log.info("Receiver detached. Shutting down.")
                 error = EventHubError(str(shutdown), shutdown)
                 self.close(exception=error)
                 raise error
         except Exception as e:
+            log.info("Unexpected error occurred (%r). Shutting down.", e)
             error = EventHubError("Receiver reconnect failed: {}".format(e))
             self.close(exception=error)
             raise error
@@ -241,21 +252,30 @@ class Receiver(object):
                 self.offset = event_data.offset
                 data_batch.append(event_data)
             return data_batch
+        except errors.TokenExpired:
+            log.info("Receiver disconnected due to token expiry. Attempting reconnect.")
+            self.reconnect()
+            return data_batch
         except (errors.LinkDetach, errors.ConnectionClose) as shutdown:
             if shutdown.action.retry and self.auto_reconnect:
+                log.info("Receiver detached. Attempting reconnect.")
                 self.reconnect()
                 return data_batch
+            log.info("Receiver detached. Shutting down.")
             error = EventHubError(str(shutdown), shutdown)
             self.close(exception=error)
             raise error
         except errors.MessageHandlerError as shutdown:
             if self.auto_reconnect:
+                log.info("Receiver detached. Attempting reconnect.")
                 self.reconnect()
                 return data_batch
+            log.info("Receiver detached. Shutting down.")
             error = EventHubError(str(shutdown), shutdown)
             self.close(exception=error)
             raise error
         except Exception as e:
+            log.info("Unexpected error occurred (%r). Shutting down.", e)
             error = EventHubError("Receive failed: {}".format(e))
             self.close(exception=error)
             raise error
