@@ -91,7 +91,9 @@ class EventHubClient(object):
     events to and receiving events from the Azure Event Hubs service.
     """
 
-    def __init__(self, address, username=None, password=None, sas_token=None, debug=False, http_proxy=None, auth_timeout=60):
+    def __init__(
+            self, address, username=None, password=None, sas_token=None,
+            debug=False, http_proxy=None, auth_timeout=60):
         """
         Constructs a new EventHubClient with the given address URL.
 
