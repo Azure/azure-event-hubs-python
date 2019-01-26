@@ -76,7 +76,7 @@ class EventHubClientAsync(EventHubClient):
 
     async def _wait_for_client(self, client):
         try:
-            while client.get_handler_state().value == 2:
+            while not client.get_handler_state().value == 2:
                 await client._handler._connection.work_async()  # pylint: disable=protected-access
         except Exception as exp:  # pylint: disable=broad-except
             await client.close_async(exception=exp)

@@ -107,7 +107,7 @@ class AsyncReceiver(Receiver):
         while not await self._handler.client_ready_async():
             await asyncio.sleep(0.05)
 
-    async def reconnect_async(self):
+    async def reconnect_async(self):  # pylint: disable=too-many-statements
         """If the Receiver was disconnected from the service with
         a retryable error - attempt to reconnect."""
         # pylint: disable=protected-access
@@ -154,6 +154,15 @@ class AsyncReceiver(Receiver):
                 await self.reconnect_async()
             else:
                 log.info("AsyncReceiver detached. Shutting down.")
+                error = EventHubError(str(shutdown), shutdown)
+                await self.close_async(exception=error)
+                raise error
+        except errors.AMQPConnectionError as shutdown:
+            if str(shutdown).startswith("Unable to open authentication session") and self.auto_reconnect:
+                log.info("AsyncReceiver couldn't authenticate. Attempting reconnect.")
+                await self.reconnect_async()
+            else:
+                log.info("AsyncReceiver connection error (%r). Shutting down.", e)
                 error = EventHubError(str(shutdown), shutdown)
                 await self.close_async(exception=error)
                 raise error
@@ -237,8 +246,8 @@ class AsyncReceiver(Receiver):
                 self.offset = event_data.offset
                 data_batch.append(event_data)
             return data_batch
-        except errors.TokenExpired:
-            log.info("AsyncReceiver disconnected due to token expiry. Attempting reconnect.")
+        except (errors.TokenExpired, errors.AuthenticationException):
+            log.info("AsyncReceiver disconnected due to token error. Attempting reconnect.")
             await self.reconnect_async()
             return data_batch
         except (errors.LinkDetach, errors.ConnectionClose) as shutdown:

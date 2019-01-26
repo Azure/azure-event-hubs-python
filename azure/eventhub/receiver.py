@@ -103,7 +103,7 @@ class Receiver(object):
         while not self._handler.client_ready():
             time.sleep(0.05)
 
-    def reconnect(self):
+    def reconnect(self):  # pylint: disable=too-many-statements
         """If the Receiver was disconnected from the service with
         a retryable error - attempt to reconnect."""
         # pylint: disable=protected-access
@@ -149,6 +149,15 @@ class Receiver(object):
                 self.reconnect()
             else:
                 log.info("Receiver detached. Shutting down.")
+                error = EventHubError(str(shutdown), shutdown)
+                self.close(exception=error)
+                raise error
+        except errors.AMQPConnectionError as shutdown:
+            if str(shutdown).startswith("Unable to open authentication session") and self.auto_reconnect:
+                log.info("Receiver couldn't authenticate. Attempting reconnect.")
+                self.reconnect()
+            else:
+                log.info("Receiver connection error (%r). Shutting down.", e)
                 error = EventHubError(str(shutdown), shutdown)
                 self.close(exception=error)
                 raise error
@@ -252,8 +261,8 @@ class Receiver(object):
                 self.offset = event_data.offset
                 data_batch.append(event_data)
             return data_batch
-        except errors.TokenExpired:
-            log.info("Receiver disconnected due to token expiry. Attempting reconnect.")
+        except (errors.TokenExpired, errors.AuthenticationException):
+            log.info("Receiver disconnected due to token error. Attempting reconnect.")
             self.reconnect()
             return data_batch
         except (errors.LinkDetach, errors.ConnectionClose) as shutdown:

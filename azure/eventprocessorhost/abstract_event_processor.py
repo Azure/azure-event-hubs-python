@@ -14,7 +14,16 @@ class AbstractEventProcessor(ABC):
         pass
 
     @abstractmethod
-    async def open_async(self, context, event_processor_context=None):
+    async def open_async(self, context):
+        """
+        Called by processor host to initialize the event processor.
+
+        :param context: Information about the partition
+        :type context: ~azure.eventprocessorhost.partition_context.PartitionContext
+        """
+        pass
+
+    async def open_with_context_async(self, context, event_processor_context=None):
         """
         Called by processor host to initialize the event processor.
 
@@ -23,7 +32,7 @@ class AbstractEventProcessor(ABC):
         :param event_processor_context: State of the Event Processor.
         :type event_processor_context: str
         """
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     async def close_async(self, context, reason):
