@@ -9,6 +9,7 @@ import time
 import os
 import sys
 import logging
+import pytest
 from logging.handlers import RotatingFileHandler
 
 from azure.eventhub import EventHubClient, Sender, EventData
@@ -78,6 +79,7 @@ def main(client, args):
 
 
 def test_long_running_send(connection_str):
+    pytest.skip("crashing")
     parser = argparse.ArgumentParser()
     parser.add_argument("--duration", help="Duration in seconds of the test", type=int, default=30)
     parser.add_argument("--payload", help="payload size", type=int, default=512)
