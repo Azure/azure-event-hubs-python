@@ -18,7 +18,8 @@ from azure.eventhub import (
 
 
 @pytest.mark.asyncio
-async def test_send_with_invalid_hostname_async(invalid_hostname, receivers):
+async def test_send_with_invalid_hostname_async(invalid_hostname, connstr_receivers):
+    _, receivers = connstr_receivers
     client = EventHubClientAsync.from_connection_string(invalid_hostname, debug=True)
     sender = client.add_async_sender()
     with pytest.raises(EventHubError):
@@ -34,7 +35,8 @@ async def test_receive_with_invalid_hostname_async(invalid_hostname):
 
 
 @pytest.mark.asyncio
-async def test_send_with_invalid_key_async(invalid_key, receivers):
+async def test_send_with_invalid_key_async(invalid_key, connstr_receivers):
+    _, receivers = connstr_receivers
     client = EventHubClientAsync.from_connection_string(invalid_key, debug=False)
     sender = client.add_async_sender()
     with pytest.raises(EventHubError):
@@ -50,7 +52,8 @@ async def test_receive_with_invalid_key_async(invalid_key):
 
 
 @pytest.mark.asyncio
-async def test_send_with_invalid_policy_async(invalid_policy, receivers):
+async def test_send_with_invalid_policy_async(invalid_policy, connstr_receivers):
+    _, receivers = connstr_receivers
     client = EventHubClientAsync.from_connection_string(invalid_policy, debug=False)
     sender = client.add_async_sender()
     with pytest.raises(EventHubError):
@@ -160,7 +163,8 @@ async def pump(receiver):
 
 
 @pytest.mark.asyncio
-async def test_max_receivers_async(connection_str, senders):
+async def test_max_receivers_async(connstr_senders):
+    connection_str, senders = connstr_senders
     client = EventHubClientAsync.from_connection_string(connection_str, debug=True)
     receivers = []
     for i in range(6):

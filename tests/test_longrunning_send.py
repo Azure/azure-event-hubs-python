@@ -23,8 +23,10 @@ def get_logger(filename, level=logging.INFO):
     formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(formatter)
-    azure_logger.addHandler(console_handler)
-    uamqp_logger.addHandler(console_handler)
+    if not azure_logger.handlers:
+        azure_logger.addHandler(console_handler)
+    if not uamqp_logger.handlers:
+        uamqp_logger.addHandler(console_handler)
 
     if filename:
         file_handler = RotatingFileHandler(filename, maxBytes=20*1024*1024, backupCount=3)
@@ -75,12 +77,12 @@ def main(client, args):
     print("Sent total {}".format(total))
 
 
-def test_long_running_send():
+def test_long_running_send(connection_str):
     parser = argparse.ArgumentParser()
     parser.add_argument("--duration", help="Duration in seconds of the test", type=int, default=30)
     parser.add_argument("--payload", help="payload size", type=int, default=512)
     parser.add_argument("--batch", help="Number of events to send and wait", type=int, default=1)
-    parser.add_argument("--conn-str", help="EventHub connection string", default=os.environ.get('EVENT_HUB_CONNECTION_STR'))
+    parser.add_argument("--conn-str", help="EventHub connection string", default=connection_str)
     parser.add_argument("--eventhub", help="Name of EventHub")
     parser.add_argument("--address", help="Address URI to the EventHub entity")
     parser.add_argument("--sas-policy", help="Name of the shared access policy to authenticate with")
@@ -109,4 +111,4 @@ def test_long_running_send():
         pass
 
 if __name__ == '__main__':
-    test_long_running_send()
+    test_long_running_send(os.environ.get('EVENT_HUB_CONNECTION_STR'))

@@ -27,8 +27,10 @@ def get_logger(filename, level=logging.INFO):
     formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(formatter)
-    azure_logger.addHandler(console_handler)
-    uamqp_logger.addHandler(console_handler)
+    if not azure_logger.handlers:
+        azure_logger.addHandler(console_handler)
+    if not uamqp_logger.handlers:
+        uamqp_logger.addHandler(console_handler)
 
     if filename:
         file_handler = RotatingFileHandler(filename, maxBytes=20*1024*1024, backupCount=3)
@@ -106,17 +108,17 @@ async def wait_and_close(host, duration):
     await host.close_async()
 
 
-def test_long_running_eph():
+def test_long_running_eph(live_eventhub):
     parser = argparse.ArgumentParser()
     parser.add_argument("--duration", help="Duration in seconds of the test", type=int, default=30)
     parser.add_argument("--storage-account", help="Storage account name", default=os.environ.get('AZURE_STORAGE_ACCOUNT'))
     parser.add_argument("--storage-key", help="Storage account access key", default=os.environ.get('AZURE_STORAGE_ACCESS_KEY'))
     parser.add_argument("--container", help="Lease container name", default="leases")
-    parser.add_argument("--eventhub", help="Name of EventHub", default=os.environ.get('EVENT_HUB_NAME'))
-    parser.add_argument("--namespace", help="Namespace of EventHub", default=os.environ.get('EVENT_HUB_NAMESPACE'))
+    parser.add_argument("--eventhub", help="Name of EventHub", default=live_eventhub['event_hub'])
+    parser.add_argument("--namespace", help="Namespace of EventHub", default=live_eventhub['namespace'])
     parser.add_argument("--suffix", help="Namespace of EventHub", default="servicebus.windows.net")
-    parser.add_argument("--sas-policy", help="Name of the shared access policy to authenticate with", default=os.environ.get('EVENT_HUB_SAS_POLICY'))
-    parser.add_argument("--sas-key", help="Shared access key", default=os.environ.get('EVENT_HUB_SAS_KEY'))
+    parser.add_argument("--sas-policy", help="Name of the shared access policy to authenticate with", default=live_eventhub['key_name'])
+    parser.add_argument("--sas-key", help="Shared access key", default=live_eventhub['access_key'])
 
     loop = asyncio.get_event_loop()
     args, _ = parser.parse_known_args()
@@ -163,4 +165,12 @@ def test_long_running_eph():
 
 
 if __name__ == '__main__':
-    test_long_running_eph()
+    config = {}
+    config['hostname'] = os.environ['EVENT_HUB_HOSTNAME']
+    config['event_hub'] = os.environ['EVENT_HUB_NAME']
+    config['key_name'] = os.environ['EVENT_HUB_SAS_POLICY']
+    config['access_key'] = os.environ['EVENT_HUB_SAS_KEY']
+    config['namespace'] = os.environ['EVENT_HUB_NAMESPACE']
+    config['consumer_group'] = "$Default"
+    config['partition'] = "0"
+    test_long_running_eph(config)
